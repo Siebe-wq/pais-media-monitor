@@ -31,14 +31,14 @@ class FakeMessages:
     def create(self, **kwargs):
         self.calls.append(kwargs)
         label = {"relevant": True, "stance": "supportive", "category": "original_reporting",
-                 "depth": 4, "rationale": "Reports on the protest."}
+                 "depth": 4, "subtopic": "ME/CFS", "rationale": "Reports on the protest."}
         block = types.SimpleNamespace(type="text", text=json.dumps(label))
         return types.SimpleNamespace(stop_reason="end_turn", content=[block], model=kwargs["model"])
 
 
 def test_classify_all_with_fake_client(monkeypatch, config_file, load_fixture):
     fake_messages = FakeMessages()
-    fake_client = types.SimpleNamespace(beta=types.SimpleNamespace(messages=fake_messages))
+    fake_client = types.SimpleNamespace(messages=fake_messages)
     fake_module = types.SimpleNamespace(
         Anthropic=lambda: fake_client,
         RateLimitError=type("RateLimitError", (Exception,), {}),
@@ -55,6 +55,15 @@ def test_classify_all_with_fake_client(monkeypatch, config_file, load_fixture):
     assert classify.classify_all(cfg, store, limit=2) == 2
     assert len(store.unclassified_articles()) == 1
     call = fake_messages.calls[0]
-    assert call["model"] == "claude-opus-5"
-    assert call["output_config"]["format"]["schema"] == classify.SCHEMA
-    assert "PauseAI" in call["system"]
+    assert call["model"] == "claude-sonnet-5-5"
+    schema = call["output_config"]["format"]["schema"]
+    assert schema["properties"]["subtopic"]["enum"] == ["long covid", "ME/CFS", "several", "none"]
+    assert set(schema["required"]) == set(schema["properties"])
+    assert "Toward the patients' cause." in call["system"]
+    assert "long covid, ME/CFS" in call["system"]
+    labelled = [r for r in store.articles_with_labels() if r["subtopic"]]
+    assert len(labelled) == 2 and labelled[0]["subtopic"] == "ME/CFS"
+
+
+def test_schema_without_subtopics():
+    assert "subtopic" not in classify.build_schema([])["properties"]

@@ -38,7 +38,8 @@ def test_write_report(tmp_path, config_file, load_fixture):
     store.upsert_counts("NL", [DayCount(f"2026-08-{d:02d}", d % 3, 1000) for d in range(1, 29)])
     arts = parse_articles(load_fixture("artlist.json"))
     store.upsert_articles("NL", arts)
-    store.save_classification(arts[0].url, True, "supportive", "original_reporting", 5, "About the protest", "m")
+    store.save_classification(arts[0].url, True, "supportive", "original_reporting", 5, "About the protest", "m",
+                              subtopic="ME/CFS")
     store.save_classification(arts[2].url, False, "neutral", "other", 1, "Unrelated", "m")
 
     path = write_report(cfg, store, tmp_path / "out")
@@ -47,6 +48,7 @@ def test_write_report(tmp_path, config_file, load_fixture):
     assert "Before and after your actions" in page
     assert "supportive 1" in page
     assert "not relevant" in page
+    assert "Mainly about" in page and "ME/CFS 1" in page
     assert "<script" not in page
     csv_text = (tmp_path / "out" / "articles.csv").read_text()
     assert "nos.nl" in csv_text and ",10.0," in csv_text  # tier 1 weight

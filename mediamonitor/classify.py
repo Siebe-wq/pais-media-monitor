@@ -5,6 +5,7 @@ Labels:
 - stance: supportive / neutral / critical / mixed, toward the organisation or its cause
 - category: what kind of journalism it is (investigative, rewrite, etc.)
 - depth: 1 (passing mention) to 5 (the article is mainly about the topic)
+- subtopic (optional): which of the configured subtopics it is mainly about
 
 Needs the `anthropic` package (`pip install -e .[llm]`) and an API key.
 Each article is one API call. Labels are a model's judgement from the title
@@ -33,18 +34,31 @@ CATEGORIES = [
 ]
 TEXT_CHARS = 6000
 
-SCHEMA = {
-    "type": "object",
-    "properties": {
+
+
+def build_schema(subtopics: list[str]) -> dict:
+    props = {
         "relevant": {"type": "boolean"},
         "stance": {"type": "string", "enum": STANCES},
         "category": {"type": "string", "enum": CATEGORIES},
         "depth": {"type": "integer", "enum": [1, 2, 3, 4, 5]},
         "rationale": {"type": "string"},
-    },
-    "required": ["relevant", "stance", "category", "depth", "rationale"],
-    "additionalProperties": False,
-}
+    }
+    if subtopics:
+        props["subtopic"] = {"type": "string", "enum": [*subtopics, "several", "none"]}
+    return {
+        "type": "object",
+        "properties": props,
+        "required": list(props),
+        "additionalProperties": False,
+    }
+
+
+DEFAULT_STANCE_GUIDE = (
+    '"supportive" if it presents the organisation or cause favourably or mostly in its own terms; '
+    '"critical" if it mainly questions, mocks or opposes it; "neutral" for straight reporting; '
+    '"mixed" if it clearly gives both sides substantial weight.'
+)
 
 SYSTEM = """You label news articles for a media monitoring tool.
 
@@ -53,13 +67,30 @@ Background on the topic: {description}
 
 For the article you are given, decide:
 - relevant: true only if the article actually concerns this topic or organisation, not an unrelated use of the same words.
-- stance: the article's overall stance toward the organisation or its cause. "supportive" if it presents it favourably or mostly in its own terms; "critical" if it mainly questions, mocks or opposes it; "neutral" for straight reporting; "mixed" if it clearly gives both sides substantial weight. Judge the article, not the quoted people.
+- stance: the article's overall stance. {stance_guide} Judge the article as a whole, not the people it quotes.
 - category: investigative = new facts found by the outlet's own digging; original_reporting = the outlet's own coverage of an event; interview_feature = profile, interview or long read; opinion = column, op-ed, editorial or letter; wire_rewrite = agency copy or a light rewrite of another outlet's story; low_quality = SEO filler, content-farm or machine-written text, aggregator spam; other = anything else.
 - depth: 1 = passing mention, 3 = one substantial section, 5 = the article is mainly about the topic.
-- rationale: one short sentence, in English.
+- rationale: one short sentence, in English.{subtopic_line}
 
 The article may be in any language. If you only have a headline, give your best guess and say so in the rationale.
-If relevant is false, set stance to neutral, category to other and depth to 1."""
+If relevant is false, set stance to neutral, category to other and depth to 1{subtopic_none}."""
+
+
+def build_system(cfg: Config) -> str:
+    if cfg.subtopics:
+        subtopic_line = ("\n- subtopic: which of these the article is mainly about: "
+                         + ", ".join(cfg.subtopics)
+                         + '. Use "several" if it covers more than one about equally, "none" if none apply.')
+        subtopic_none = ' and subtopic to "none"'
+    else:
+        subtopic_line = subtopic_none = ""
+    return SYSTEM.format(
+        name=cfg.name,
+        description=cfg.description or "(none given)",
+        stance_guide=cfg.stance_guide or DEFAULT_STANCE_GUIDE,
+        subtopic_line=subtopic_line,
+        subtopic_none=subtopic_none,
+    )
 
 
 class _TextExtractor(HTMLParser):
@@ -132,24 +163,22 @@ def classify_all(cfg: Config, store: Store, limit: int | None = None) -> int:
         sys.exit("Classification needs the anthropic package: pip install -e '.[llm]'")
 
     client = anthropic.Anthropic()
-    system = SYSTEM.format(name=cfg.name, description=cfg.description or "(none given)")
+    system = build_system(cfg)
+    schema = build_schema(cfg.subtopics)
     rows = store.unclassified_articles(limit)
     done = 0
     for i, row in enumerate(rows, 1):
         text = fetch_text(row["url"]) if cfg.fetch_article_text else ""
         try:
-            response = client.beta.messages.create(
+            response = client.messages.create(
                 model=cfg.model,
                 max_tokens=4000,
                 system=system,
                 messages=[{"role": "user", "content": build_user_message(row, text)}],
                 output_config={
                     "effort": "low",
-                    "format": {"type": "json_schema", "schema": SCHEMA},
+                    "format": {"type": "json_schema", "schema": schema},
                 },
-                # If the main model declines, let the API retry on a fallback model.
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
             )
         except anthropic.RateLimitError:
             print("Rate limited; stopping. Run classify again later to continue.", file=sys.stderr)
@@ -170,8 +199,8 @@ def classify_all(cfg: Config, store: Store, limit: int | None = None) -> int:
         label = json.loads(text_block)
         store.save_classification(
             row["url"], label["relevant"], label["stance"], label["category"],
-            label["depth"], label["rationale"], response.model,
+            label["depth"], label["rationale"], response.model, label.get("subtopic"),
         )
         done += 1
-        print(f"  [{i}/{len(rows)}] {label['stance']:<10} {label['category']:<18} {row['title'][:60]}")
+        print(f"  [{i}/{len(rows)}] {label['stance']:<10} {label['category']:<18} {label.get('subtopic') or '':<12} {row['title'][:60]}")
     return done

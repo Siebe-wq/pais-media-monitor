@@ -1,16 +1,31 @@
 # Copy this file to config.toml and edit it.
 
 [topic]
-name = "PauseAI"
-# Used only for the optional Claude labelling step, so the model knows
-# what "supportive" and "relevant" mean here.
-description = "PauseAI is a grassroots movement calling for an international pause on training the most powerful AI systems until they can be shown to be safe."
-# Search terms. Any match counts. Terms with spaces are searched as exact phrases.
-# GDELT matches words in the original text, so add local-language terms too.
-terms = ["PauseAI", "Pause AI"]
+name = "Post-acute infection syndromes (PAIS)"
+# Used only by the optional Claude labelling step, so the model knows what
+# counts as relevant.
+description = "Post-acute infection syndromes are long-lasting illnesses that follow an infection, such as long COVID, ME/CFS (myalgic encephalomyelitis / chronic fatigue syndrome) and similar syndromes after other infections. Patient groups campaign for recognition, biomedical research, proper care and social support."
 
-# One entry per country. `gdelt` is the country name in lower case with the
-# spaces removed, as GDELT's sourcecountry: filter expects (e.g. "unitedkingdom").
+# Search terms. Any match counts.
+# GDELT searches English machine translations of articles in ~65 languages,
+# so write terms in English: "long covid" also finds Dutch and German articles.
+# Avoid "PAIS" on its own: it also matches Spanish/Portuguese "país" (country).
+# Run `mediamonitor terms` to see how many hits each term gets and whether the
+# sample headlines are on topic.
+terms = [
+  "long covid",
+  "post-covid syndrome",   # plain "post-covid" also matches "the post-covid economy"
+  "post-covid condition",
+  "ME/CFS",
+  "myalgic encephalomyelitis",
+  "chronic fatigue syndrome",
+  "post-acute infection syndrome",
+  "post-infectious syndrome",
+  "post-exertional malaise",
+]
+
+# One entry per country. `gdelt` is the country's English name in lower case
+# with the spaces removed, as GDELT's sourcecountry: filter expects.
 [[countries]]
 code = "NL"
 name = "Netherlands"
@@ -37,14 +52,10 @@ name = "United States"
 gdelt = "unitedstates"
 
 # Your public actions. They show as dashed lines on the charts and get a
-# before/after row in the report. These two are placeholders: replace them.
+# before/after row in the report. This is a placeholder: replace it.
 [[actions]]
-date = 2026-08-15
-label = "Example: protest in The Hague"
-
-[[actions]]
-date = 2026-09-10
-label = "Example: open letter published"
+date = 2026-09-12
+label = "Example: protest wake"
 
 [reach]
 # CSV with columns domain,tier. See outlets.example.csv.
@@ -59,7 +70,19 @@ unknown_weight = 1.0
 database = "mediamonitor.db"
 
 [classify]
-model = "claude-opus-5"
+model = "claude-sonnet-5-5"
 # Try to download each article and give the model its opening text.
 # If false (or the site blocks it), only the headline is used.
 fetch_article_text = true
+# What the stance labels mean for this topic. Edit to match your own view of
+# what helps and what hurts.
+stance_guide = """
+Stance toward the patient advocacy cause. "supportive" = treats these
+conditions as serious physical illnesses, or covers patients' needs, research
+funding, gaps in care or advocates' demands favourably. "critical" = frames
+them as mainly psychological or exaggerated, doubts that they exist or how
+severe they are, or dismisses patient advocacy. "neutral" = straight reporting
+without either framing. "mixed" = gives both framings substantial weight.
+"""
+# Optional: the model also says which condition each article is mainly about.
+subtopics = ["long covid", "ME/CFS", "other post-infectious syndrome"]

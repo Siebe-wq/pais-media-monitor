@@ -80,6 +80,7 @@ def country_summaries(cfg: Config, days, series, articles, reach: ReachTable) ->
             "classified": len(classified),
             "relevant": len(relevant),
             "stance": stance,
+            "subtopics": Counter(a["subtopic"] for a in relevant if a.get("subtopic")),
             "good_share": (sum(category[k] for k in GOOD_CATEGORIES) / len(relevant)) if relevant else None,
             "weak_share": (sum(category[k] for k in WEAK_CATEGORIES) / len(relevant)) if relevant else None,
         })
@@ -201,6 +202,7 @@ def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTabl
     out.append(f"<p class='sub'>Source: GDELT. Period: {span}. Generated {generated:%Y-%m-%d %H:%M} UTC.</p>")
 
     any_classified = any(s["classified"] for s in summaries)
+    any_subtopic = any(s["subtopics"] for s in summaries)
     out.append("<h2>Per country</h2><div class='table-wrap'><table><thead><tr>"
                "<th>Country</th><th class='num'>Articles (GDELT count)</th>"
                "<th class='num'>Per day, last 30 days</th><th class='num'>Per day, 30 days before</th>"
@@ -208,6 +210,8 @@ def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTabl
     if any_classified:
         out.append("<th class='num'>Relevant / labelled</th><th>Stance (relevant only)</th>"
                    "<th class='num'>Original work</th><th class='num'>Rewrite / low quality</th>")
+        if any_subtopic:
+            out.append("<th>Mainly about</th>")
     out.append("</tr></thead><tbody>")
     for s in summaries:
         out.append(f"<tr><td>{e(s['name'])}</td><td class='num'>{s['total']:,}</td>"
@@ -219,6 +223,9 @@ def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTabl
             out.append(f"<td class='num'>{s['relevant']} / {s['classified']}</td><td>{e(stance_txt)}</td>"
                        f"<td class='num'>{_fmt(s['good_share'], pct=True)}</td>"
                        f"<td class='num'>{_fmt(s['weak_share'], pct=True)}</td>")
+            if any_subtopic:
+                sub_txt = ", ".join(f"{k} {n}" for k, n in s["subtopics"].most_common()) or "–"
+                out.append(f"<td>{e(sub_txt)}</td>")
         out.append("</tr>")
     out.append("</tbody></table></div>")
     out.append("<p class='note'>Articles = GDELT's matched-article count. Reach-weighted = stored articles "
@@ -258,6 +265,8 @@ def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTabl
                "<th class='num'>Tier</th><th>Headline</th>")
     if any_classified:
         out.append("<th>Stance</th><th>Type</th><th class='num'>Depth</th>")
+        if any_subtopic:
+            out.append("<th>About</th>")
     out.append("</tr></thead><tbody>")
     for a in articles[:max_articles]:
         tier = reach.tier(a["domain"])
@@ -265,13 +274,16 @@ def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTabl
                    f"<td class='num'>{tier or '–'}</td>"
                    f"<td><a href='{e(a['url'])}' rel='noopener noreferrer'>{e(a['title'] or a['url'])}</a></td>")
         if any_classified:
+            ncols = 4 if any_subtopic else 3
             if a["relevant"] is None:
-                out.append("<td>–</td><td>–</td><td class='num'>–</td>")
+                out.append("<td>–</td>" * ncols)
             elif not a["relevant"]:
-                out.append(f"<td colspan='3' title='{e(a['rationale'] or '')}'>not relevant</td>")
+                out.append(f"<td colspan='{ncols}' title='{e(a['rationale'] or '')}'>not relevant</td>")
             else:
                 out.append(f"<td title='{e(a['rationale'] or '')}'>{e(a['stance'])}</td>"
                            f"<td>{e(a['category'])}</td><td class='num'>{a['depth']}</td>")
+                if any_subtopic:
+                    out.append(f"<td>{e(a.get('subtopic') or '–')}</td>")
         out.append("</tr>")
     out.append("</tbody></table></div></main></body></html>")
     return "".join(out)
@@ -294,7 +306,7 @@ def write_report(cfg: Config, store: Store, out_dir: Path) -> Path:
 
     with (out_dir / "articles.csv").open("w", newline="", encoding="utf-8") as f:
         fields = ["seen_at", "country", "domain", "tier", "weight", "language", "title", "url",
-                  "relevant", "stance", "category", "depth", "rationale"]
+                  "relevant", "stance", "category", "depth", "subtopic", "rationale"]
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         for a in articles:

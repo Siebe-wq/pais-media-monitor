@@ -39,5 +39,9 @@ outlets_file = "outlets.csv"
 
 [storage]
 database = "test.db"
+
+[classify]
+stance_guide = "Toward the patients' cause."
+subtopics = ["long covid", "ME/CFS"]
 ''')
     return tmp_path / "config.toml"

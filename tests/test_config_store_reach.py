@@ -12,7 +12,15 @@ def test_load_config(config_file):
     assert [c.code for c in cfg.countries] == ["NL", "BE"]
     assert cfg.actions[0].date == date(2026, 8, 15)
     assert cfg.database == config_file.parent / "test.db"
-    assert cfg.model == "claude-opus-5"
+    assert cfg.model == "claude-sonnet-5-5"
+    assert cfg.stance_guide == "Toward the patients' cause."
+    assert cfg.subtopics == ["long covid", "ME/CFS"]
+
+
+def test_query_quotes_non_words(config_file):
+    cfg = load_config(config_file)
+    cfg.terms = ["long covid", "ME/CFS", "post-covid", "PASC"]
+    assert cfg.gdelt_query() == '("long covid" OR "ME/CFS" OR "post-covid" OR PASC)'
 
 
 def test_single_term_query(config_file):
@@ -33,6 +41,20 @@ def test_store_is_idempotent(tmp_path, load_fixture):
     assert len(store.unclassified_articles()) == 3
     store.save_classification(arts[0].url, True, "neutral", "original_reporting", 4, "x", "m")
     assert len(store.unclassified_articles()) == 2
+
+
+def test_store_adds_subtopic_column_to_old_database(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.execute("""CREATE TABLE classifications (url TEXT PRIMARY KEY, relevant INTEGER NOT NULL,
+        stance TEXT NOT NULL, category TEXT NOT NULL, depth INTEGER NOT NULL, rationale TEXT,
+        model TEXT, classified_at TEXT NOT NULL)""")
+    conn.commit()
+    conn.close()
+    store = Store(path)
+    store.save_classification("u", True, "neutral", "other", 1, "r", "m", subtopic="long covid")
+    assert store.conn.execute("SELECT subtopic FROM classifications").fetchone()[0] == "long covid"
 
 
 def test_reach_matches_subdomains():

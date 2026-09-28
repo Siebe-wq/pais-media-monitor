@@ -8,6 +8,12 @@ from datetime import date
 from pathlib import Path
 
 
+def quote_term(term: str) -> str:
+    """GDELT needs quotes around anything that is not one plain word (spaces, hyphens, slashes)."""
+    term = term.strip()
+    return term if term.isalnum() else f'"{term}"'
+
+
 @dataclass
 class Country:
     code: str  # short label used in the database and report, e.g. "NL"
@@ -34,15 +40,14 @@ class Config:
     tier_weights: dict[int, float] = field(default_factory=lambda: {1: 10.0, 2: 3.0, 3: 1.0})
     unknown_weight: float = 1.0
     database: Path = Path("mediamonitor.db")
-    model: str = "claude-opus-5"
+    model: str = "claude-sonnet-5-5"
     fetch_article_text: bool = True
+    stance_guide: str = ""
+    subtopics: list[str] = field(default_factory=list)
 
     def gdelt_query(self) -> str:
         """Build the keyword part of a GDELT query from the configured terms."""
-        parts = []
-        for term in self.terms:
-            term = term.strip()
-            parts.append(f'"{term}"' if " " in term or "-" in term else term)
+        parts = [quote_term(t) for t in self.terms]
         if len(parts) == 1:
             return parts[0]
         return "(" + " OR ".join(parts) + ")"
@@ -79,8 +84,10 @@ def load_config(path: str | Path) -> Config:
         outlets_file=(base / outlets_file) if outlets_file else None,
         unknown_weight=float(reach.get("unknown_weight", 1.0)),
         database=base / storage.get("database", "mediamonitor.db"),
-        model=classify.get("model", "claude-opus-5"),
+        model=classify.get("model", "claude-sonnet-5-5"),
         fetch_article_text=classify.get("fetch_article_text", True),
+        stance_guide=classify.get("stance_guide", "").strip(),
+        subtopics=classify.get("subtopics", []),
     )
     if tier_weights:
         cfg.tier_weights = tier_weights

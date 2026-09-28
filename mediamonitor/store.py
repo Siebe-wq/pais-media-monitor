@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS classifications (
     stance TEXT NOT NULL,
     category TEXT NOT NULL,
     depth INTEGER NOT NULL,
+    subtopic TEXT,
     rationale TEXT,
     model TEXT,
     classified_at TEXT NOT NULL
@@ -52,6 +53,10 @@ class Store:
         self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        # Databases made before the subtopic column existed.
+        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(classifications)")}
+        if "subtopic" not in cols:
+            self.conn.execute("ALTER TABLE classifications ADD COLUMN subtopic TEXT")
 
     def close(self) -> None:
         self.conn.close()
@@ -84,16 +89,17 @@ class Store:
         self.conn.commit()
 
     def save_classification(self, url: str, relevant: bool, stance: str, category: str,
-                            depth: int, rationale: str, model: str) -> None:
+                            depth: int, rationale: str, model: str, subtopic: str | None = None) -> None:
         self.conn.execute(
-            """INSERT INTO classifications (url, relevant, stance, category, depth, rationale, model, classified_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO classifications
+                 (url, relevant, stance, category, depth, subtopic, rationale, model, classified_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(url) DO UPDATE SET
                  relevant = excluded.relevant, stance = excluded.stance,
-                 category = excluded.category, depth = excluded.depth,
+                 category = excluded.category, depth = excluded.depth, subtopic = excluded.subtopic,
                  rationale = excluded.rationale, model = excluded.model,
                  classified_at = excluded.classified_at""",
-            (url, int(relevant), stance, category, depth, rationale, model, _now()),
+            (url, int(relevant), stance, category, depth, subtopic, rationale, model, _now()),
         )
         self.conn.commit()
 
@@ -113,7 +119,7 @@ class Store:
     def articles_with_labels(self) -> list[sqlite3.Row]:
         return self.conn.execute(
             """SELECT a.url, a.country, a.title, a.domain, a.language, a.seen_at,
-                      c.relevant, c.stance, c.category, c.depth, c.rationale
+                      c.relevant, c.stance, c.category, c.depth, c.subtopic, c.rationale
                FROM articles a LEFT JOIN classifications c ON c.url = a.url
                ORDER BY a.seen_at DESC"""
         ).fetchall()

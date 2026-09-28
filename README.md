@@ -1,8 +1,11 @@
 # Media monitor
 
-Track how much news coverage an organisation or topic gets, per country, and
-whether it moves after your public actions (protests, report launches, open
-letters).
+Track how much news coverage a topic gets, per country, and whether it moves
+after your public actions (protests, report launches, open letters).
+
+The example config tracks post-acute infection syndromes (PAIS): long COVID,
+ME/CFS and similar illnesses that follow an infection. Any other topic works
+by editing the config.
 
 It has three steps:
 
@@ -10,9 +13,10 @@ It has three steps:
    list (headline, outlet, date, link). Source: [GDELT](https://www.gdeltproject.org/),
    which is free and needs no key.
 2. `classify` (optional) asks Claude to label each article: is it really about
-   the topic, what is its stance (supportive / neutral / critical / mixed),
-   what kind of journalism is it (investigative, own reporting, interview,
-   opinion, wire rewrite, low-quality filler), and how deep is the coverage (1–5).
+   the topic, what is its stance (supportive / neutral / critical / mixed, as
+   defined in your config), what kind of journalism is it (investigative, own
+   reporting, interview, opinion, wire rewrite, low-quality filler), how deep
+   is the coverage (1–5), and optionally which condition it is mainly about.
 3. `report` writes `report.html` plus `weekly_counts.csv` and `articles.csv`.
 
 The report shows per country: article counts, last 30 days vs the 30 days
@@ -26,6 +30,7 @@ articles with their labels.
 python -m venv .venv && . .venv/bin/activate
 pip install -e .            # add '.[llm]' for the Claude labelling step
 cp config.example.toml config.toml   # edit terms, countries, actions
+mediamonitor terms                   # check each search term for noise
 mediamonitor fetch --days 30
 mediamonitor report
 open reports/report.html
@@ -47,11 +52,15 @@ updated and articles are not duplicated.
 See `config.example.toml`. The main parts:
 
 - `[topic]`: a name, a one-paragraph description (used only by the labeller)
-  and search terms. Add terms in local languages, since GDELT matches the
-  original text.
+  and search terms. **Write terms in English.** GDELT machine-translates
+  articles in about 65 languages into English and searches the translation, so
+  "long covid" also finds Dutch and German articles. Avoid short, ambiguous
+  terms: "PAIS" alone would match the Spanish and Portuguese word for "country".
 - `[[countries]]`: one block per country. `gdelt` is the country's English
   name in lower case with spaces removed (`unitedkingdom`).
 - `[[actions]]`: dated things you did. They appear as dashed lines on the charts.
+- `[classify]`: the model, a `stance_guide` that says what "supportive" and
+  "critical" mean for your topic, and optional `subtopics`.
 - `[reach]`: a CSV of outlets with a tier (1 = large national, 2 = regional or
   trade, 3 = small) and a weight per tier. `outlets.example.csv` has a starter
   list of big outlets in NL, BE, DE, UK and US. Extend it for your countries.
@@ -66,7 +75,12 @@ See `config.example.toml`. The main parts:
   within a country more than levels between countries.
 - **Country = where the outlet is based**, not what the article is about.
 - **Keyword matches include noise.** A short or common term can match unrelated
-  articles. The labeller's `relevant` flag helps; tight search terms help more.
+  articles, and "post-covid" can match articles about the economy after the
+  pandemic. Run `mediamonitor terms` and read the sample headlines. The
+  labeller's `relevant` flag also helps.
+- **Search goes through machine translation.** A term can be missed if the
+  translation renders it differently (e.g. Dutch "ME/CVS" may or may not come
+  out as "ME/CFS"). Check with `terms` and add variants if needed.
 - **An article list request returns at most 250 articles.** The tool asks in
   7-day windows and warns if a window hits the cap; then use `--window 2` or less.
   The daily counts are not affected by this cap.
@@ -74,8 +88,7 @@ See `config.example.toml`. The main parts:
   (e.g. from national audience surveys or Similarweb) could replace them.
 - **Labels are a model's judgement**, from the headline plus the opening text
   when the page can be downloaded (paywalls often block it). Check a sample by
-  hand before trusting the percentages. The default model is `claude-opus-5`.
-  You can set a cheaper one in `[classify] model`; check label quality if you do.
+  hand before trusting the percentages. The default model is `claude-sonnet-5-5`.
 - **Before/after is not proof of effect.** Other news, weekends and slow news
   days all move the numbers. With many actions you could build a proper
   comparison (e.g. against other countries or a matched control topic).
@@ -85,10 +98,21 @@ See `config.example.toml`. The main parts:
 - Other sources: [Media Cloud](https://www.mediacloud.org/) (free account,
   curated per-country outlet collections, good for research-grade counts),
   Event Registry / NewsAPI.ai (paid, has sentiment and outlet ranking).
-- Share of voice: track a comparison topic (e.g. other AI-policy groups) with
-  the same setup and show coverage side by side.
+- Share of voice: track a comparison topic (e.g. another patient group's
+  condition) with the same setup and show coverage side by side.
 - Social media: Bluesky has an open API; X and TikTok are much harder.
 - Batch the labelling with the Message Batches API to halve the cost.
+
+## Running it in Claude Code on the web
+
+The cloud sandbox blocks most outside hosts by default. To let it reach GDELT,
+open the environment's settings (the environment menu in the session's title
+bar, then Edit) and either add `api.gdeltproject.org` to the allowed domains
+or choose a broader network access level. See
+https://code.claude.com/docs/en/claude-code-on-the-web. For `classify` with
+`fetch_article_text = true`, the sandbox also needs to reach the news sites
+themselves, which in practice means full network access. The labeller also
+needs an `ANTHROPIC_API_KEY` set as an environment secret.
 
 ## Development
 
