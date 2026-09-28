@@ -1,0 +1,5 @@
+{"articles": [
+ {"url": "https://nos.nl/artikel/1", "url_mobile": "", "title": "Demonstranten willen pauze in AI-ontwikkeling", "seendate": "20260815T120000Z", "socialimage": "", "domain": "nos.nl", "language": "Dutch", "sourcecountry": "Netherlands"},
+ {"url": "https://www.nu.nl/tech/2", "url_mobile": "", "title": "PauseAI protesteert in Den Haag", "seendate": "20260816T090000Z", "socialimage": "", "domain": "nu.nl", "language": "Dutch", "sourcecountry": "Netherlands"},
+ {"url": "https://example-blog.nl/3", "url_mobile": "", "title": "Pause AI? Waarom niet", "seendate": "20260801T070000Z", "socialimage": "", "domain": "example-blog.nl", "language": "Dutch", "sourcecountry": "Netherlands"}
+]}

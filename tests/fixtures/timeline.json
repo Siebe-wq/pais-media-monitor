@@ -1,0 +1,6 @@
+{"query_details": {"title": "x", "date_resolution": "15m"}, "timeline": [{"series": "Article Count", "data": [
+ {"date": "20260815T000000Z", "value": 1, "norm": 1000},
+ {"date": "20260815T001500Z", "value": 2, "norm": 1100},
+ {"date": "20260816T000000Z", "value": 0, "norm": 900},
+ {"date": "20260818T120000Z", "value": 4, "norm": 950}
+]}]}

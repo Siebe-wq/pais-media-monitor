@@ -1,0 +1,65 @@
+# Copy this file to config.toml and edit it.
+
+[topic]
+name = "PauseAI"
+# Used only for the optional Claude labelling step, so the model knows
+# what "supportive" and "relevant" mean here.
+description = "PauseAI is a grassroots movement calling for an international pause on training the most powerful AI systems until they can be shown to be safe."
+# Search terms. Any match counts. Terms with spaces are searched as exact phrases.
+# GDELT matches words in the original text, so add local-language terms too.
+terms = ["PauseAI", "Pause AI"]
+
+# One entry per country. `gdelt` is the country name in lower case with the
+# spaces removed, as GDELT's sourcecountry: filter expects (e.g. "unitedkingdom").
+[[countries]]
+code = "NL"
+name = "Netherlands"
+gdelt = "netherlands"
+
+[[countries]]
+code = "BE"
+name = "Belgium"
+gdelt = "belgium"
+
+[[countries]]
+code = "DE"
+name = "Germany"
+gdelt = "germany"
+
+[[countries]]
+code = "UK"
+name = "United Kingdom"
+gdelt = "unitedkingdom"
+
+[[countries]]
+code = "US"
+name = "United States"
+gdelt = "unitedstates"
+
+# Your public actions. They show as dashed lines on the charts and get a
+# before/after row in the report. These two are placeholders: replace them.
+[[actions]]
+date = 2026-08-15
+label = "Example: protest in The Hague"
+
+[[actions]]
+date = 2026-09-10
+label = "Example: open letter published"
+
+[reach]
+# CSV with columns domain,tier. See outlets.example.csv.
+outlets_file = "outlets.example.csv"
+unknown_weight = 1.0
+[reach.tier_weights]
+1 = 10.0   # large national outlet
+2 = 3.0    # regional or trade outlet
+3 = 1.0    # small outlet
+
+[storage]
+database = "mediamonitor.db"
+
+[classify]
+model = "claude-opus-5"
+# Try to download each article and give the model its opening text.
+# If false (or the site blocks it), only the headline is used.
+fetch_article_text = true
