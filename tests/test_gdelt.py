@@ -57,3 +57,51 @@ def test_articles_splits_into_windows(monkeypatch, load_fixture):
     assert calls[-1]["enddatetime"] == "20260820000000"
     assert calls[0]["query"] == "PauseAI sourcecountry:netherlands"
     assert len(arts) == 9 and not hit_cap
+
+
+def test_backs_off_on_429_then_succeeds(monkeypatch):
+    import urllib.error
+    responses = [
+        urllib.error.HTTPError("u", 429, "Too Many Requests", {}, None),
+        FakeResponse(b"Please limit requests to one every 5 seconds"),
+        FakeResponse(b'{"articles": []}'),
+    ]
+
+    def fake_urlopen(req, timeout):
+        r = responses.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+    monkeypatch.setattr(gdelt.urllib.request, "urlopen", fake_urlopen)
+    sleeps = []
+    client = GdeltClient(min_interval=0, backoff=20, sleep=sleeps.append)
+    assert client._get({"query": "x"}) == {"articles": []}
+    assert sleeps == [20, 40]
+
+
+def test_gives_up_after_retries(monkeypatch):
+    import urllib.error
+
+    def always_429(req, timeout):
+        raise urllib.error.HTTPError("u", 429, "Too Many Requests", {}, None)
+
+    monkeypatch.setattr(gdelt.urllib.request, "urlopen", always_429)
+    client = GdeltClient(min_interval=0, retries=3, sleep=lambda s: None)
+    with pytest.raises(GdeltError, match="after 3 tries: HTTP 429"):
+        client._get({"query": "x"})
+
+
+def test_other_http_errors_are_not_retried(monkeypatch):
+    import urllib.error
+    calls = []
+
+    def bad_request(req, timeout):
+        calls.append(1)
+        raise urllib.error.HTTPError("u", 400, "Bad Request", {}, None)
+
+    monkeypatch.setattr(gdelt.urllib.request, "urlopen", bad_request)
+    client = GdeltClient(min_interval=0, sleep=lambda s: None)
+    with pytest.raises(GdeltError, match="HTTP 400"):
+        client._get({"query": "x"})
+    assert len(calls) == 1

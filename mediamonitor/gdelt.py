@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -84,10 +85,22 @@ def parse_timeline(payload: dict) -> list[DayCount]:
 
 
 class GdeltClient:
-    def __init__(self, min_interval: float = 5.5, timeout: float = 60, retries: int = 3):
+    """Calls the API at most once per `min_interval` seconds.
+
+    When GDELT says we are going too fast (HTTP 429 or its plain-text
+    "limit requests" message), wait `backoff`, then twice that, and so on,
+    up to `retries` tries. Shared machines (cloud sandboxes, CI runners) can
+    hit this limit even when we are polite, because other users share the
+    same internet address.
+    """
+
+    def __init__(self, min_interval: float = 6.0, timeout: float = 60, retries: int = 6,
+                 backoff: float = 20.0, sleep=time.sleep):
         self.min_interval = min_interval
         self.timeout = timeout
         self.retries = retries
+        self.backoff = backoff
+        self._sleep = sleep
         self._last_call = 0.0
 
     def _get(self, params: dict) -> dict:
@@ -97,15 +110,21 @@ class GdeltClient:
         for attempt in range(self.retries):
             wait = self.min_interval - (time.monotonic() - self._last_call)
             if wait > 0:
-                time.sleep(wait)
+                self._sleep(wait)
             self._last_call = time.monotonic()
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": "mediamonitor/0.1"})
                 with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                     body = resp.read().decode("utf-8", errors="replace")
-            except OSError as e:
+            except urllib.error.HTTPError as e:
+                last_error = GdeltError(f"HTTP {e.code}")
+                if e.code == 429 or e.code >= 500:
+                    self._sleep(self.backoff * 2 ** attempt)
+                    continue
+                raise last_error from e
+            except OSError as e:  # timeouts, dropped connections
                 last_error = e
-                time.sleep(self.min_interval * (attempt + 1))
+                self._sleep(self.backoff * 2 ** attempt)
                 continue
             if not body.strip():
                 return {}  # GDELT returns an empty body when nothing matches
@@ -115,7 +134,7 @@ class GdeltClient:
                 # GDELT reports errors (bad query, rate limit) as plain text.
                 last_error = GdeltError(body.strip()[:300])
                 if "limit requests" in body.lower():
-                    time.sleep(self.min_interval * (attempt + 2))
+                    self._sleep(self.backoff * 2 ** attempt)
                     continue
                 raise last_error
         raise GdeltError(f"GDELT request failed after {self.retries} tries: {last_error}")

@@ -20,6 +20,7 @@ def cmd_fetch(args) -> None:
     start = end - timedelta(days=args.days)
     query = cfg.gdelt_query()
     print(f"Query: {query}\nPeriod: {start:%Y-%m-%d} to {end:%Y-%m-%d}")
+    failed = 0
     for c in cfg.countries:
         try:
             counts = client.daily_counts(query, c.gdelt, start, end)
@@ -28,11 +29,14 @@ def cmd_fetch(args) -> None:
             new = store.upsert_articles(c.code, articles)
         except GdeltError as e:
             print(f"  {c.name}: GDELT error: {e}", file=sys.stderr)
+            failed += 1
             continue
         total = sum(x.count for x in counts)
         warn = "  (some windows hit the 250 cap; try a smaller --window)" if hit_cap else ""
         print(f"  {c.name}: {total} articles counted, {len(articles)} listed, {new} new{warn}")
     store.close()
+    if failed == len(cfg.countries):
+        sys.exit("Every country failed. Nothing was fetched.")
 
 
 def cmd_terms(args) -> None:

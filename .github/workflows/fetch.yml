@@ -1,0 +1,63 @@
+# Fetches news data from GDELT once a week, rebuilds the report and saves
+# both back into this repository (data/ and docs/).
+# Run it by hand: GitHub > Actions > "Fetch media data" > "Run workflow".
+name: Fetch media data
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"  # Mondays 05:17 UTC
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many days back to fetch (article lists go back at most ~90)"
+        default: "14"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-media-data
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      DAYS: ${{ inputs.days || '14' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e '.[llm]'
+
+      - name: Fetch from GDELT
+        run: mediamonitor -c config.toml fetch --days "$DAYS"
+
+      # Only runs if you add an ANTHROPIC_API_KEY secret to the repository.
+      # Capped per run to keep costs predictable.
+      - name: Label new articles with Claude
+        if: env.ANTHROPIC_API_KEY != ''
+        run: mediamonitor -c config.toml classify --limit 200
+
+      - name: Build report
+        run: |
+          mediamonitor -c config.toml report --out docs
+          cp docs/report.html docs/index.html
+
+      - name: Save results to the repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data docs
+          if git diff --cached --quiet; then
+            echo "Nothing new to save."
+          else
+            git commit -m "Update media data ($(date -u +%Y-%m-%d))"
+            git push
+          fi

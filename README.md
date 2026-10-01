@@ -67,8 +67,13 @@ See `config.example.toml`. The main parts:
 
 ## Limits you should know about
 
-- **GDELT only searches about the last 3 months.** Older data needs regular
-  fetching (above) or GDELT's BigQuery tables.
+- **Article lists only cover the last 3 months.** Older articles need regular
+  fetching (see the weekly run below). GDELT's daily counts reportedly go back
+  to 2017, but the tool does not fetch that far back yet.
+- **GDELT limits how often you can ask.** It allows about one request every
+  5 seconds per internet address. Shared machines (cloud sandboxes, GitHub's
+  runners) can be refused even when the tool is polite, because others share
+  the address. The tool waits and retries, up to about 10 minutes per request.
 - **GDELT coverage is uneven.** It covers online news only (no TV, radio,
   print-only or paywalled-only content), and some countries and small outlets
   are thinly covered. Its crawler also changes over time. Compare trends
@@ -102,6 +107,24 @@ See `config.example.toml`. The main parts:
   condition) with the same setup and show coverage side by side.
 - Social media: Bluesky has an open API; X and TikTok are much harder.
 - Batch the labelling with the Message Batches API to halve the cost.
+
+## Automatic weekly run (GitHub Actions)
+
+`.github/workflows/fetch.yml` runs on GitHub's machines every Monday. It:
+
+1. fetches the last 14 days from GDELT, using `config.toml`;
+2. labels up to 200 new articles with Claude, but only if the repository has
+   an `ANTHROPIC_API_KEY` secret (Settings > Secrets and variables > Actions);
+3. rebuilds the report into `docs/` (`docs/index.html`, plus CSV files);
+4. saves the database (`data/mediamonitor.db`) and report back into the repo.
+
+To run it by hand: the **Actions** tab > **Fetch media data** > **Run workflow**.
+For a first run, set "days" to 90 to fill in the last three months.
+
+To view the report as a web page instead of as source code, turn on GitHub
+Pages once: Settings > Pages > Source "Deploy from a branch", pick this
+branch and the `/docs` folder. Note that in a public repository, Pages and
+the data files are public too.
 
 ## Running it in Claude Code on the web
 

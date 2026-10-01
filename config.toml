@@ -1,0 +1,88 @@
+# Live config used by the GitHub Actions workflow. config.example.toml is the template.
+
+[topic]
+name = "Post-acute infection syndromes (PAIS)"
+# Used only by the optional Claude labelling step, so the model knows what
+# counts as relevant.
+description = "Post-acute infection syndromes are long-lasting illnesses that follow an infection, such as long COVID, ME/CFS (myalgic encephalomyelitis / chronic fatigue syndrome) and similar syndromes after other infections. Patient groups campaign for recognition, biomedical research, proper care and social support."
+
+# Search terms. Any match counts.
+# GDELT searches English machine translations of articles in ~65 languages,
+# so write terms in English: "long covid" also finds Dutch and German articles.
+# Avoid "PAIS" on its own: it also matches Spanish/Portuguese "país" (country).
+# Run `mediamonitor terms` to see how many hits each term gets and whether the
+# sample headlines are on topic.
+terms = [
+  "long covid",
+  "post-covid syndrome",   # plain "post-covid" also matches "the post-covid economy"
+  "post-covid condition",
+  "ME/CFS",
+  "myalgic encephalomyelitis",
+  "chronic fatigue syndrome",
+  "post-acute infection syndrome",
+  "post-infectious syndrome",
+  "post-exertional malaise",
+]
+
+# One entry per country. `gdelt` is the country's English name in lower case
+# with the spaces removed, as GDELT's sourcecountry: filter expects.
+[[countries]]
+code = "NL"
+name = "Netherlands"
+gdelt = "netherlands"
+
+[[countries]]
+code = "BE"
+name = "Belgium"
+gdelt = "belgium"
+
+[[countries]]
+code = "DE"
+name = "Germany"
+gdelt = "germany"
+
+[[countries]]
+code = "UK"
+name = "United Kingdom"
+gdelt = "unitedkingdom"
+
+[[countries]]
+code = "US"
+name = "United States"
+gdelt = "unitedstates"
+
+# Your public actions. They show as dashed lines on the charts and get a
+# before/after row in the report. This is a placeholder: replace it.
+[[actions]]
+date = 2026-09-12
+label = "Example: protest wake"
+
+[reach]
+# CSV with columns domain,tier. See outlets.example.csv.
+outlets_file = "outlets.example.csv"
+unknown_weight = 1.0
+[reach.tier_weights]
+1 = 10.0   # large national outlet
+2 = 3.0    # regional or trade outlet
+3 = 1.0    # small outlet
+
+[storage]
+database = "data/mediamonitor.db"
+
+[classify]
+model = "claude-sonnet-5-5"
+# Try to download each article and give the model its opening text.
+# If false (or the site blocks it), only the headline is used.
+fetch_article_text = true
+# What the stance labels mean for this topic. Edit to match your own view of
+# what helps and what hurts.
+stance_guide = """
+Stance toward the patient advocacy cause. "supportive" = treats these
+conditions as serious physical illnesses, or covers patients' needs, research
+funding, gaps in care or advocates' demands favourably. "critical" = frames
+them as mainly psychological or exaggerated, doubts that they exist or how
+severe they are, or dismisses patient advocacy. "neutral" = straight reporting
+without either framing. "mixed" = gives both framings substantial weight.
+"""
+# Optional: the model also says which condition each article is mainly about.
+subtopics = ["long covid", "ME/CFS", "other post-infectious syndrome"]
