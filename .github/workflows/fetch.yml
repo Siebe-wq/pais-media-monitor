@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
+      PYTHONUNBUFFERED: "1"  # show progress in the log as it happens
       DAYS: ${{ inputs.days || '14' }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
