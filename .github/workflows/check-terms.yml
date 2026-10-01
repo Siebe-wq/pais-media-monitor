@@ -1,0 +1,31 @@
+# Tests each search term in config.toml on its own against GDELT and prints
+# how many articles it finds, with sample headlines. Use it to spot terms that
+# GDELT rejects or that pull in unrelated news.
+# Run it by hand: GitHub > Actions > "Check search terms" > "Run workflow".
+name: Check search terms
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many days back to look"
+        default: "30"
+
+permissions:
+  contents: read
+
+jobs:
+  terms:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONUNBUFFERED: "1"
+      DAYS: ${{ inputs.days || '30' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Check each term
+        run: mediamonitor -c config.toml terms --days "$DAYS" --samples 5
