@@ -23,6 +23,25 @@ def test_query_quotes_non_words(config_file):
     assert cfg.gdelt_query() == '("long covid" OR "ME/CFS" OR "post-covid" OR PASC)'
 
 
+def test_queries_split_to_stay_short(config_file):
+    cfg = load_config(config_file)
+    cfg.terms = ["long covid", "post-covid syndrome", "post-covid condition", "ME/CFS",
+                 "myalgic encephalomyelitis", "chronic fatigue syndrome",
+                 "post-acute infection syndrome", "post-infectious syndrome", "post-exertional malaise"]
+    queries = cfg.gdelt_queries()
+    assert len(cfg.gdelt_query()) > 190
+    assert len(queries) == 2
+    assert all(len(q) <= 190 for q in queries)
+    assert queries[0].startswith('("long covid" OR')
+    joined = " ".join(queries)
+    assert all(f'"{t}"' in joined for t in cfg.terms)
+
+
+def test_short_term_list_is_one_query(config_file):
+    cfg = load_config(config_file)
+    assert cfg.gdelt_queries() == ['(PauseAI OR "Pause AI")']
+
+
 def test_single_term_query(config_file):
     cfg = load_config(config_file)
     cfg.terms = ["PauseAI"]

@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .config import load_config, quote_term
-from .gdelt import GdeltClient, GdeltError
+from .gdelt import DayCount, GdeltClient, GdeltError
 from .store import Store
 
 
@@ -20,25 +20,45 @@ def cmd_fetch(args) -> None:
     client = GdeltClient(deadline=deadline)
     end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     start = end - timedelta(days=args.days)
-    query = cfg.gdelt_query()
-    print(f"Query: {query}\nPeriod: {start:%Y-%m-%d} to {end:%Y-%m-%d}")
+    queries = cfg.gdelt_queries()
+    print(f"Period: {start:%Y-%m-%d} to {end:%Y-%m-%d}")
+    for q in queries:
+        print(f"Query: {q}")
     failed = 0
     for c in cfg.countries:
         try:
-            counts = client.daily_counts(query, c.gdelt, start, end)
+            # Daily counts are summed over the query groups. An article that
+            # matches terms in two groups is counted twice; article lists are
+            # de-duplicated by URL in the database.
+            counts = merge_counts([client.daily_counts(q, c.gdelt, start, end) for q in queries])
             store.upsert_counts(c.code, counts)
-            articles, hit_cap = client.articles(query, c.gdelt, start, end)
+            articles, hit_cap = [], False
+            for q in queries:
+                batch, cap = client.articles(q, c.gdelt, start, end)
+                articles += batch
+                hit_cap = hit_cap or cap
             new = store.upsert_articles(c.code, articles)
         except GdeltError as e:
             print(f"  {c.name}: GDELT error: {e}", file=sys.stderr)
             failed += 1
             continue
         total = sum(x.count for x in counts)
+        listed = len({a.url for a in articles})
         warn = "  (some 6-hour windows were still full; a few articles were missed)" if hit_cap else ""
-        print(f"  {c.name}: {total} articles counted, {len(articles)} listed, {new} new{warn}")
+        print(f"  {c.name}: {total} articles counted, {listed} listed, {new} new{warn}")
     store.close()
     if failed == len(cfg.countries):
         sys.exit("Every country failed. Nothing was fetched.")
+
+
+def merge_counts(series: list[list[DayCount]]) -> list[DayCount]:
+    by_day: dict[str, list[int]] = {}
+    for counts in series:
+        for d in counts:
+            acc = by_day.setdefault(d.day, [0, d.total_monitored])
+            acc[0] += d.count
+            acc[1] = max(acc[1], d.total_monitored)
+    return [DayCount(day, c, t) for day, (c, t) in sorted(by_day.items())]
 
 
 def cmd_terms(args) -> None:

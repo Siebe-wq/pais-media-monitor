@@ -132,3 +132,12 @@ def test_other_http_errors_are_not_retried(monkeypatch):
     with pytest.raises(GdeltError, match="HTTP 400"):
         client._get({"query": "x"})
     assert len(calls) == 1
+
+
+def test_merge_counts_sums_groups():
+    from mediamonitor.cli import merge_counts
+    from mediamonitor.gdelt import DayCount
+    merged = merge_counts([[DayCount("2026-09-01", 2, 100), DayCount("2026-09-02", 1, 90)],
+                           [DayCount("2026-09-01", 3, 100)]])
+    assert [(d.day, d.count, d.total_monitored) for d in merged] == [
+        ("2026-09-01", 5, 100), ("2026-09-02", 1, 90)]

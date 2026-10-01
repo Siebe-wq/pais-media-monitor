@@ -8,6 +8,9 @@ from datetime import date
 from pathlib import Path
 
 
+MAX_KEYWORD_QUERY = 190  # characters; leaves room for " sourcecountry:..." (see gdelt_queries)
+
+
 def quote_term(term: str) -> str:
     """GDELT needs quotes around anything that is not one plain word (spaces, hyphens, slashes)."""
     term = term.strip()
@@ -46,11 +49,27 @@ class Config:
     subtopics: list[str] = field(default_factory=list)
 
     def gdelt_query(self) -> str:
-        """Build the keyword part of a GDELT query from the configured terms."""
-        parts = [quote_term(t) for t in self.terms]
-        if len(parts) == 1:
-            return parts[0]
-        return "(" + " OR ".join(parts) + ")"
+        """All terms as one OR query. Can be too long for GDELT; see gdelt_queries."""
+        return _or_query([quote_term(t) for t in self.terms])
+
+    def gdelt_queries(self, max_len: int = MAX_KEYWORD_QUERY) -> list[str]:
+        """Split the terms into OR queries that each stay under `max_len` characters.
+
+        GDELT rejects long queries ("Your query was too short or too long").
+        In tests, 232 characters of terms worked on their own, but failed once
+        " sourcecountry:netherlands" was added, so we leave room for that filter.
+        Terms keep their config order, so related terms stay in the same group.
+        """
+        groups: list[list[str]] = [[]]
+        for term in (quote_term(t) for t in self.terms):
+            if groups[-1] and len(_or_query(groups[-1] + [term])) > max_len:
+                groups.append([])
+            groups[-1].append(term)
+        return [_or_query(g) for g in groups if g]
+
+
+def _or_query(parts: list[str]) -> str:
+    return parts[0] if len(parts) == 1 else "(" + " OR ".join(parts) + ")"
 
 
 def load_config(path: str | Path) -> Config:
