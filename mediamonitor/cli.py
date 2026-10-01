@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -15,7 +16,8 @@ from .store import Store
 def cmd_fetch(args) -> None:
     cfg = load_config(args.config)
     store = Store(cfg.database)
-    client = GdeltClient()
+    deadline = time.monotonic() + args.max_minutes * 60 if args.max_minutes else None
+    client = GdeltClient(deadline=deadline)
     end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     start = end - timedelta(days=args.days)
     query = cfg.gdelt_query()
@@ -25,14 +27,14 @@ def cmd_fetch(args) -> None:
         try:
             counts = client.daily_counts(query, c.gdelt, start, end)
             store.upsert_counts(c.code, counts)
-            articles, hit_cap = client.articles(query, c.gdelt, start, end, window_days=args.window)
+            articles, hit_cap = client.articles(query, c.gdelt, start, end)
             new = store.upsert_articles(c.code, articles)
         except GdeltError as e:
             print(f"  {c.name}: GDELT error: {e}", file=sys.stderr)
             failed += 1
             continue
         total = sum(x.count for x in counts)
-        warn = "  (some windows hit the 250 cap; try a smaller --window)" if hit_cap else ""
+        warn = "  (some 6-hour windows were still full; a few articles were missed)" if hit_cap else ""
         print(f"  {c.name}: {total} articles counted, {len(articles)} listed, {new} new{warn}")
     store.close()
     if failed == len(cfg.countries):
@@ -49,7 +51,7 @@ def cmd_terms(args) -> None:
         query = quote_term(term)
         try:
             total = sum(x.count for x in client.daily_counts(query, None, start, end))
-            sample, _ = client.articles(query, None, start, end, window_days=args.days)
+            sample, _ = client.articles(query, None, start, end, split=False)
         except GdeltError as e:
             print(f"{term}: GDELT error: {e}\n")
             continue
@@ -86,7 +88,8 @@ def main(argv=None) -> None:
 
     f = sub.add_parser("fetch", help="download counts and article lists from GDELT")
     f.add_argument("--days", type=int, default=30, help="how many days back (GDELT keeps ~90)")
-    f.add_argument("--window", type=int, default=7, help="days per article-list request")
+    f.add_argument("--max-minutes", type=float, default=None,
+                   help="stop asking GDELT after this many minutes; what was fetched is kept")
     f.set_defaults(func=cmd_fetch)
 
     t = sub.add_parser("terms", help="test each search term separately, to spot noisy ones")

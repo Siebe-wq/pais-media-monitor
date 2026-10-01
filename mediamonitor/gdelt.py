@@ -95,8 +95,9 @@ class GdeltClient:
     """
 
     def __init__(self, min_interval: float = 6.0, timeout: float = 60, retries: int = 6,
-                 backoff: float = 20.0, sleep=time.sleep):
+                 backoff: float = 20.0, sleep=time.sleep, deadline: float | None = None):
         self.min_interval = min_interval
+        self.deadline = deadline  # time.monotonic() value after which we stop asking
         self.timeout = timeout
         self.retries = retries
         self.backoff = backoff
@@ -108,6 +109,8 @@ class GdeltClient:
         url = API_URL + "?" + urllib.parse.urlencode(params)
         last_error: Exception | None = None
         for attempt in range(self.retries):
+            if self.deadline is not None and time.monotonic() > self.deadline:
+                raise GdeltError("time budget used up")
             wait = self.min_interval - (time.monotonic() - self._last_call)
             if wait > 0:
                 self._sleep(wait)
@@ -153,28 +156,30 @@ class GdeltClient:
         })
         return parse_timeline(payload)
 
-    def articles(self, keywords: str, country: str | None,
-                 start: datetime, end: datetime, window_days: int = 7) -> tuple[list[Article], bool]:
-        """Fetch article lists in windows. Returns (articles, hit_cap).
+    def articles(self, keywords: str, country: str | None, start: datetime, end: datetime,
+                 split: bool = True, min_window: timedelta = timedelta(hours=6)) -> tuple[list[Article], bool]:
+        """Fetch the article list for a period. Returns (articles, hit_cap).
 
-        hit_cap is True if any window returned the 250-article maximum, which
-        means some articles were missed. Use a smaller window if that happens.
+        Asks for the whole period first. If GDELT returns its 250-article
+        maximum, some articles were left out, so (when `split` is on) the period
+        is halved and each half fetched again, down to `min_window`. For a
+        small topic this is usually one request. hit_cap is True if even the
+        smallest window was full.
         """
-        out: list[Article] = []
-        hit_cap = False
-        cursor = start
-        while cursor < end:
-            window_end = min(cursor + timedelta(days=window_days), end)
-            payload = self._get({
-                "query": self.build_query(keywords, country),
-                "mode": "artlist",
-                "maxrecords": MAX_RECORDS,
-                "sort": "datedesc",
-                "startdatetime": _fmt(cursor),
-                "enddatetime": _fmt(window_end),
-            })
-            batch = parse_articles(payload)
-            hit_cap = hit_cap or len(batch) >= MAX_RECORDS
-            out.extend(batch)
-            cursor = window_end
-        return out, hit_cap
+        payload = self._get({
+            "query": self.build_query(keywords, country),
+            "mode": "artlist",
+            "maxrecords": MAX_RECORDS,
+            "sort": "datedesc",
+            "startdatetime": _fmt(start),
+            "enddatetime": _fmt(end),
+        })
+        batch = parse_articles(payload)
+        if len(batch) < MAX_RECORDS:
+            return batch, False
+        if not split or end - start <= min_window:
+            return batch, True
+        mid = start + (end - start) / 2
+        first, cap1 = self.articles(keywords, country, start, mid, split, min_window)
+        second, cap2 = self.articles(keywords, country, mid, end, split, min_window)
+        return first + second, cap1 or cap2

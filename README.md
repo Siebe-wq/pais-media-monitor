@@ -86,8 +86,8 @@ See `config.example.toml`. The main parts:
 - **Search goes through machine translation.** A term can be missed if the
   translation renders it differently (e.g. Dutch "ME/CVS" may or may not come
   out as "ME/CFS"). Check with `terms` and add variants if needed.
-- **An article list request returns at most 250 articles.** The tool asks in
-  7-day windows and warns if a window hits the cap; then use `--window 2` or less.
+- **An article list request returns at most 250 articles.** The tool asks for
+  the whole period first and halves it until each part fits, down to 6 hours.
   The daily counts are not affected by this cap.
 - **Reach is a rough proxy.** Tiers are hand-set. Real audience numbers
   (e.g. from national audience surveys or Similarweb) could replace them.

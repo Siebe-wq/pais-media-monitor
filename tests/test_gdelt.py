@@ -45,18 +45,45 @@ def test_plain_text_error_raises(monkeypatch):
         client._get({"query": "x", "mode": "artlist"})
 
 
-def test_articles_splits_into_windows(monkeypatch, load_fixture):
+def test_articles_one_request_when_under_cap(monkeypatch, load_fixture):
     calls = []
     client = GdeltClient(min_interval=0)
     monkeypatch.setattr(client, "_get", lambda params: calls.append(params) or load_fixture("artlist.json"))
-    start = datetime(2026, 8, 1, tzinfo=timezone.utc)
-    end = datetime(2026, 8, 20, tzinfo=timezone.utc)
-    arts, hit_cap = client.articles("PauseAI", "netherlands", start, end, window_days=7)
-    assert len(calls) == 3
-    assert calls[0]["startdatetime"] == "20260801000000"
-    assert calls[-1]["enddatetime"] == "20260820000000"
+    start = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    end = datetime(2026, 9, 29, tzinfo=timezone.utc)
+    arts, hit_cap = client.articles("PauseAI", "netherlands", start, end)
+    assert len(calls) == 1 and len(arts) == 3 and not hit_cap
+    assert calls[0]["startdatetime"] == "20260701000000"
     assert calls[0]["query"] == "PauseAI sourcecountry:netherlands"
-    assert len(arts) == 9 and not hit_cap
+
+
+def test_articles_halves_period_when_cap_is_hit(monkeypatch):
+    from datetime import timedelta
+    full = {"articles": [{"url": f"u{i}", "title": "t", "domain": "d", "language": "", "sourcecountry": "",
+                          "seendate": "20260801T000000Z"} for i in range(250)]}
+    small = {"articles": [{"url": "x", "title": "t", "domain": "d", "language": "", "sourcecountry": "",
+                           "seendate": "20260801T000000Z"}]}
+    calls = []
+
+    def fake_get(params):
+        calls.append((params["startdatetime"], params["enddatetime"]))
+        return full if len(calls) == 1 else small
+
+    client = GdeltClient(min_interval=0)
+    monkeypatch.setattr(client, "_get", fake_get)
+    start = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    arts, hit_cap = client.articles("x", None, start, start + timedelta(days=10))
+    assert calls == [("20260801000000", "20260811000000"),
+                     ("20260801000000", "20260806000000"),
+                     ("20260806000000", "20260811000000")]
+    assert len(arts) == 2 and not hit_cap
+
+
+def test_stops_at_deadline():
+    import time
+    client = GdeltClient(min_interval=0, deadline=time.monotonic() - 1)
+    with pytest.raises(GdeltError, match="time budget"):
+        client._get({"query": "x"})
 
 
 def test_backs_off_on_429_then_succeeds(monkeypatch):

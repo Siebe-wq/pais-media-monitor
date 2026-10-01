@@ -38,7 +38,8 @@ jobs:
         run: pip install -e '.[llm]'
 
       - name: Fetch from GDELT
-        run: mediamonitor -c config.toml fetch --days "$DAYS"
+        # Stops asking GDELT after 120 minutes; whatever was fetched is still saved.
+        run: mediamonitor -c config.toml fetch --days "$DAYS" --max-minutes 120
 
       # Only runs if you add an ANTHROPIC_API_KEY secret to the repository.
       # Capped per run to keep costs predictable.
@@ -47,11 +48,13 @@ jobs:
         run: mediamonitor -c config.toml classify --limit 200
 
       - name: Build report
+        if: always()
         run: |
           mediamonitor -c config.toml report --out docs
           cp docs/report.html docs/index.html
 
       - name: Save results to the repository
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
