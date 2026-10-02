@@ -24,6 +24,7 @@ terms = ["PauseAI", "Pause AI"]
 code = "NL"
 name = "Netherlands"
 gdelt = "netherlands"
+mediacloud = "Netherlands - National"
 
 [[countries]]
 code = "BE"
@@ -39,6 +40,9 @@ outlets_file = "outlets.csv"
 
 [storage]
 database = "test.db"
+
+[mediacloud]
+terms = ["long covid", "ME/CVS", "postcovid"]
 
 [classify]
 stance_guide = "Toward the patients' cause."

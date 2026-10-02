@@ -81,6 +81,31 @@ def cmd_terms(args) -> None:
         print()
 
 
+def cmd_fetch_mediacloud(args) -> None:
+    from .mediacloud_source import MediaCloudError, fetch_mediacloud
+
+    cfg = load_config(args.config)
+    store = Store(cfg.database)
+    end = datetime.now(timezone.utc).date()
+    start = end - timedelta(days=args.days)
+    try:
+        failed = fetch_mediacloud(cfg, store, start, end, max_pages=args.max_pages)
+    except MediaCloudError as e:
+        sys.exit(f"Media Cloud: {e}")
+    finally:
+        store.close()
+    if failed and failed == sum(1 for c in cfg.countries if c.mediacloud):
+        sys.exit("Every Media Cloud country failed. Nothing was fetched.")
+
+
+def cmd_mc_collections(args) -> None:
+    from .mediacloud_source import _client, find_collections
+
+    _, directory = _client(None)
+    for c in find_collections(directory, args.name):
+        print(f'{c["id"]:>10}  {c["name"]}')
+
+
 def cmd_classify(args) -> None:
     from .classify import classify_all
 
@@ -116,6 +141,15 @@ def main(argv=None) -> None:
     t.add_argument("--days", type=int, default=30)
     t.add_argument("--samples", type=int, default=8, help="sample headlines to show per term")
     t.set_defaults(func=cmd_terms)
+
+    m = sub.add_parser("fetch-mediacloud", help="download counts and article lists from Media Cloud")
+    m.add_argument("--days", type=int, default=30)
+    m.add_argument("--max-pages", type=int, default=10, help="article-list pages per country")
+    m.set_defaults(func=cmd_fetch_mediacloud)
+
+    mc = sub.add_parser("mc-collections", help="search Media Cloud collection names, e.g. 'Netherlands'")
+    mc.add_argument("name")
+    mc.set_defaults(func=cmd_mc_collections)
 
     c = sub.add_parser("classify", help="label stored articles with Claude (optional)")
     c.add_argument("--limit", type=int, default=None, help="label at most this many articles")

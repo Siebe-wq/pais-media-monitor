@@ -11,6 +11,11 @@ on:
       days:
         description: "How many days back to fetch (article lists go back at most ~90)"
         default: "14"
+      sources:
+        description: "Which sources to fetch"
+        type: choice
+        options: [all, gdelt, mediacloud]
+        default: all
 
 permissions:
   contents: write
@@ -26,7 +31,9 @@ jobs:
     env:
       PYTHONUNBUFFERED: "1"  # show progress in the log as it happens
       DAYS: ${{ inputs.days || '14' }}
+      SOURCES: ${{ inputs.sources || 'all' }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      MC_API_KEY: ${{ secrets.MC_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,9 +42,17 @@ jobs:
           python-version: "3.12"
 
       - name: Install
-        run: pip install -e '.[llm]'
+        run: pip install -e '.[llm,mediacloud]'
+
+      # Only runs if the repository has an MC_API_KEY secret. Runs first because
+      # it is quick; GDELT can take up to two hours when it is rate-limiting.
+      - name: Fetch from Media Cloud
+        if: env.MC_API_KEY != '' && env.SOURCES != 'gdelt'
+        continue-on-error: true
+        run: mediamonitor -c config.toml fetch-mediacloud --days "$DAYS"
 
       - name: Fetch from GDELT
+        if: env.SOURCES != 'mediacloud'
         # Stops asking GDELT after 120 minutes; whatever was fetched is still saved.
         run: mediamonitor -c config.toml fetch --days "$DAYS" --max-minutes 120
 

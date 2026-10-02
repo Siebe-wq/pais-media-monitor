@@ -108,11 +108,31 @@ See `config.example.toml`. The main parts:
 - Social media: Bluesky has an open API; X and TikTok are much harder.
 - Batch the labelling with the Message Batches API to halve the cost.
 
+## Second source: Media Cloud
+
+GDELT finds very few Dutch-language articles on this topic (in a first test:
+7 Dutch hits in 90 days, mostly from English-language expat sites). Media Cloud
+searches the original text of articles in national outlet collections, so it
+is used as a second source.
+
+- Needs a free account at https://search.mediacloud.org/sign-in. The API key
+  is on your profile page (person icon, top right, then Profile). Store it as
+  the repository secret `MC_API_KEY`; never put it in a file.
+- Terms go under `[mediacloud] terms` in the config, in every language you
+  track. Each country names its collection, e.g. `mediacloud = "Netherlands - National"`.
+- `mediamonitor fetch-mediacloud --days 90` fetches; `mediamonitor
+  mc-collections Netherlands` lists matching collection names.
+- Media Cloud's main index starts in 2022, and its client allows 2 requests a
+  minute. GDELT and Media Cloud monitor different outlets, so their counts are
+  compared side by side rather than added up.
+
 ## Automatic weekly run (GitHub Actions)
 
 `.github/workflows/fetch.yml` runs on GitHub's machines every Monday. It:
 
-1. fetches the last 14 days from GDELT, using `config.toml`;
+1. fetches the last 14 days from Media Cloud (if the `MC_API_KEY` secret
+   exists) and from GDELT, using `config.toml`. "Run workflow" also lets you
+   pick a single source;
 2. labels up to 200 new articles with Claude, but only if the repository has
    an `ANTHROPIC_API_KEY` secret (Settings > Secrets and variables > Actions);
 3. rebuilds the report into `docs/` (`docs/index.html`, plus CSV files);

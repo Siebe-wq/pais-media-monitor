@@ -190,7 +190,7 @@ def _bar_chart(weeks: list[tuple[date, int]], actions, width=320, height=120) ->
 
 
 def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTable,
-                generated: datetime, max_articles: int = 150) -> str:
+                generated: datetime, max_articles: int = 150, mc_days=(), mc_series=None) -> str:
     e = html.escape
     out = [
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>",
@@ -198,8 +198,12 @@ def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTabl
         f"<title>{e(cfg.name)} media monitor</title><style>{CSS}</style></head><body><main>",
         f"<h1>Media attention: {e(cfg.name)}</h1>",
     ]
+    mc_series = mc_series or {}
+    has_mc = bool(mc_days)
     span = f"{days[0].isoformat()} to {days[-1].isoformat()}" if days else "no data"
-    out.append(f"<p class='sub'>Source: GDELT. Period: {span}. Generated {generated:%Y-%m-%d %H:%M} UTC.</p>")
+    sources = "GDELT and Media Cloud" if has_mc else "GDELT"
+    out.append(f"<p class='sub'>Sources: {sources}. GDELT period: {span}. "
+               f"Generated {generated:%Y-%m-%d %H:%M} UTC.</p>")
 
     any_classified = any(s["classified"] for s in summaries)
     any_subtopic = any(s["subtopics"] for s in summaries)
@@ -207,6 +211,8 @@ def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTabl
                "<th>Country</th><th class='num'>Articles (GDELT count)</th>"
                "<th class='num'>Per day, last 30 days</th><th class='num'>Per day, 30 days before</th>"
                "<th class='num'>Reach-weighted</th>")
+    if has_mc:
+        out.append("<th class='num'>Media Cloud stories</th><th class='num'>Media Cloud per day, last 30 days</th>")
     if any_classified:
         out.append("<th class='num'>Relevant / labelled</th><th>Stance (relevant only)</th>"
                    "<th class='num'>Original work</th><th class='num'>Rewrite / low quality</th>")
@@ -217,6 +223,9 @@ def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTabl
         out.append(f"<tr><td>{e(s['name'])}</td><td class='num'>{s['total']:,}</td>"
                    f"<td class='num'>{_fmt(s['per_day_last30'])}</td><td class='num'>{_fmt(s['per_day_prev30'])}</td>"
                    f"<td class='num'>{_fmt(s['weighted_reach'], 0)}</td>")
+        if has_mc:
+            out.append(f"<td class='num'>{s['mc_total']:,}</td><td class='num'>{_fmt(s['mc_last30'])}</td>"
+                       if s.get("mc_total") is not None else "<td class='num'>–</td><td class='num'>–</td>")
         if any_classified:
             st = s["stance"]
             stance_txt = ", ".join(f"{k} {st[k]}" for k in ("supportive", "neutral", "mixed", "critical") if st[k]) or "–"
@@ -231,8 +240,12 @@ def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTabl
     out.append("<p class='note'>Articles = GDELT's matched-article count. Reach-weighted = stored articles "
                "weighted by outlet tier (see outlets CSV); articles labelled irrelevant are left out. "
                "Original work = investigative, own reporting, interviews and features.</p>")
+    if has_mc:
+        out.append("<p class='note'>Media Cloud counts stories in its national collection for each country, "
+                   "searching the original text with the terms in the config. GDELT and Media Cloud monitor "
+                   "different outlets, so their numbers are not expected to match.</p>")
 
-    out.append("<h2>Articles per week</h2>")
+    out.append("<h2>Articles per week (GDELT)</h2>" if has_mc else "<h2>Articles per week</h2>")
     if cfg.actions:
         out.append("<p class='legend'><span class='swatch'></span>Your actions (hover for the label)</p>")
     out.append("<p class='note'>Each chart has its own vertical scale, so compare shapes, not heights.</p>")
@@ -241,6 +254,13 @@ def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTabl
         wk = weekly(days, series.get(c.code, []))
         out.append(f"<div class='card'><h3>{e(c.name)}</h3>{_bar_chart(wk, cfg.actions)}</div>")
     out.append("</div>")
+    if has_mc:
+        out.append("<h2>Articles per week (Media Cloud)</h2><div class='grid'>")
+        for c in cfg.countries:
+            if c.mediacloud:
+                wk = weekly(list(mc_days), mc_series.get(c.code, []))
+                out.append(f"<div class='card'><h3>{e(c.name)}</h3>{_bar_chart(wk, cfg.actions)}</div>")
+        out.append("</div>")
 
     if cfg.actions and days:
         out.append("<h2>Before and after your actions</h2>")
@@ -262,7 +282,7 @@ def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTabl
     out.append(f"<h2>Latest articles</h2><p class='note'>Newest {min(max_articles, len(articles))} "
                f"of {len(articles)} stored.</p>")
     out.append("<div class='table-wrap'><table><thead><tr><th>Date</th><th>Country</th><th>Outlet</th>"
-               "<th class='num'>Tier</th><th>Headline</th>")
+               "<th class='num'>Tier</th><th>Headline</th><th>Found by</th>")
     if any_classified:
         out.append("<th>Stance</th><th>Type</th><th class='num'>Depth</th>")
         if any_subtopic:
@@ -272,7 +292,8 @@ def render_html(cfg: Config, days, series, summaries, articles, reach: ReachTabl
         tier = reach.tier(a["domain"])
         out.append(f"<tr><td>{a['seen_at'][:10]}</td><td>{e(a['country'])}</td><td>{e(a['domain'])}</td>"
                    f"<td class='num'>{tier or '–'}</td>"
-                   f"<td><a href='{e(a['url'])}' rel='noopener noreferrer'>{e(a['title'] or a['url'])}</a></td>")
+                   f"<td><a href='{e(a['url'])}' rel='noopener noreferrer'>{e(a['title'] or a['url'])}</a></td>"
+                   f"<td>{'Media Cloud' if a.get('source') == 'mediacloud' else 'GDELT'}</td>")
         if any_classified:
             ncols = 4 if any_subtopic else 3
             if a["relevant"] is None:
@@ -296,16 +317,25 @@ def write_report(cfg: Config, store: Store, out_dir: Path) -> Path:
     articles = [dict(r) for r in store.articles_with_labels()]
     reach = ReachTable.from_csv(cfg.outlets_file, cfg.tier_weights, cfg.unknown_weight)
     summaries = country_summaries(cfg, days, series, articles, reach)
+    mc_days, mc_series = daily_series(store.mc_daily_counts(), codes)
+    for summ in summaries:
+        vals = mc_series.get(summ["code"], [])
+        has = any(c.code == summ["code"] and c.mediacloud for c in cfg.countries) and mc_days
+        summ["mc_total"] = sum(vals) if has else None
+        summ["mc_last30"] = (window_mean(mc_days, vals, mc_days[-1] - timedelta(days=29),
+                                         mc_days[-1] + timedelta(days=1)) if has else None)
 
     with (out_dir / "weekly_counts.csv").open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["week_start", *codes])
-        weekly_by_country = {c: dict(weekly(days, series[c])) for c in codes}
-        for wk in sorted({wk for d in weekly_by_country.values() for wk in d}):
-            w.writerow([wk.isoformat(), *[weekly_by_country[c].get(wk, 0) for c in codes]])
+        mc_codes = [c.code for c in cfg.countries if c.mediacloud] if mc_days else []
+        w.writerow(["week_start", *[f"{c}_gdelt" for c in codes], *[f"{c}_mediacloud" for c in mc_codes]])
+        gd = {c: dict(weekly(days, series[c])) for c in codes}
+        mc = {c: dict(weekly(mc_days, mc_series[c])) for c in mc_codes}
+        for wk in sorted({wk for d in [*gd.values(), *mc.values()] for wk in d}):
+            w.writerow([wk.isoformat(), *[gd[c].get(wk, 0) for c in codes], *[mc[c].get(wk, 0) for c in mc_codes]])
 
     with (out_dir / "articles.csv").open("w", newline="", encoding="utf-8") as f:
-        fields = ["seen_at", "country", "domain", "tier", "weight", "language", "title", "url",
+        fields = ["seen_at", "country", "source", "domain", "tier", "weight", "language", "title", "url",
                   "relevant", "stance", "category", "depth", "subtopic", "rationale"]
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
@@ -313,7 +343,8 @@ def write_report(cfg: Config, store: Store, out_dir: Path) -> Path:
             w.writerow({**{k: a.get(k) for k in fields},
                         "tier": reach.tier(a["domain"]), "weight": reach.weight(a["domain"])})
 
-    page = render_html(cfg, days, series, summaries, articles, reach, datetime.now(timezone.utc))
+    page = render_html(cfg, days, series, summaries, articles, reach, datetime.now(timezone.utc),
+                       mc_days=mc_days, mc_series=mc_series)
     path = out_dir / "report.html"
     path.write_text(page, encoding="utf-8")
     return path

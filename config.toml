@@ -26,36 +26,62 @@ terms = [
 
 # One entry per country. `gdelt` is the country's English name in lower case
 # with the spaces removed, as GDELT's sourcecountry: filter expects.
+# `mediacloud` (optional) is the name of a Media Cloud collection; if a name
+# does not match exactly, the error lists similar ones. `mediamonitor
+# mc-collections Netherlands` also searches the names.
 [[countries]]
 code = "NL"
 name = "Netherlands"
 gdelt = "netherlands"
+mediacloud = "Netherlands - National"
 
 [[countries]]
 code = "BE"
 name = "Belgium"
 gdelt = "belgium"
+mediacloud = "Belgium - National"
 
 [[countries]]
 code = "DE"
 name = "Germany"
 gdelt = "germany"
+mediacloud = "Germany - National"
 
 [[countries]]
 code = "UK"
 name = "United Kingdom"
 gdelt = "unitedkingdom"
+mediacloud = "United Kingdom - National"
 
 [[countries]]
 code = "US"
 name = "United States"
 gdelt = "unitedstates"
+mediacloud = "United States - National"
 
 # Your public actions. They show as dashed lines on the charts and get a
 # before/after row in the report. This is a placeholder: replace it.
 [[actions]]
 date = 2026-09-12
 label = "Example: protest wake"
+
+# Media Cloud (optional second source, needs MC_API_KEY). It searches the
+# ORIGINAL text, so list terms in every language you track. Phrases match
+# regardless of capitals and hyphens ("long covid" also finds "Long-Covid").
+[mediacloud]
+terms = [
+  # English
+  "long covid", "post-covid syndrome", "post-covid condition", "ME/CFS",
+  "myalgic encephalomyelitis", "chronic fatigue syndrome", "post-exertional malaise",
+  "post-acute infection syndrome", "post-infectious syndrome",
+  # Dutch
+  "langdurige covid", "postcovid", "postcovidsyndroom", "post-COVID-syndroom", "ME/CVS",
+  "chronisch vermoeidheidssyndroom", "myalgische encefalomyelitis", "post-exertionele malaise",
+  # German
+  "Post-Covid-Syndrom", "Post-Vac", "chronisches Fatigue-Syndrom", "Myalgische Enzephalomyelitis",
+  # French (Belgium)
+  "covid long", "syndrome post-covid", "encéphalomyélite myalgique", "syndrome de fatigue chronique",
+]
 
 [reach]
 # CSV with columns domain,tier. See outlets.example.csv.

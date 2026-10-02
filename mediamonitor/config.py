@@ -22,6 +22,7 @@ class Country:
     code: str  # short label used in the database and report, e.g. "NL"
     name: str  # display name
     gdelt: str  # value for GDELT's sourcecountry: filter, e.g. "netherlands"
+    mediacloud: str | int | None = None  # Media Cloud collection name or id, e.g. "Netherlands - National"
 
 
 @dataclass
@@ -47,6 +48,11 @@ class Config:
     fetch_article_text: bool = True
     stance_guide: str = ""
     subtopics: list[str] = field(default_factory=list)
+    mc_terms: list[str] = field(default_factory=list)
+
+    def mediacloud_query(self) -> str:
+        """Media Cloud searches the original text, so its terms are in several languages."""
+        return " OR ".join(f'"{t.strip()}"' for t in self.mc_terms)
 
     def gdelt_query(self) -> str:
         """All terms as one OR query. Can be too long for GDELT; see gdelt_queries."""
@@ -80,7 +86,8 @@ def load_config(path: str | Path) -> Config:
 
     topic = raw["topic"]
     countries = [
-        Country(code=c["code"], name=c.get("name", c["code"]), gdelt=c["gdelt"])
+        Country(code=c["code"], name=c.get("name", c["code"]), gdelt=c["gdelt"],
+                mediacloud=c.get("mediacloud"))
         for c in raw["countries"]
     ]
     actions = [
@@ -107,6 +114,7 @@ def load_config(path: str | Path) -> Config:
         fetch_article_text=classify.get("fetch_article_text", True),
         stance_guide=classify.get("stance_guide", "").strip(),
         subtopics=classify.get("subtopics", []),
+        mc_terms=raw.get("mediacloud", {}).get("terms", []),
     )
     if tier_weights:
         cfg.tier_weights = tier_weights

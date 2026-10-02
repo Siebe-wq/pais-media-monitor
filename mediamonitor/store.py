@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS articles (
     language TEXT,
     source_country TEXT,
     seen_at TEXT NOT NULL,
-    fetched_at TEXT NOT NULL
+    fetched_at TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'gdelt'  -- where we first found it: gdelt or mediacloud
 );
 CREATE INDEX IF NOT EXISTS idx_articles_country_seen ON articles(country, seen_at);
 
@@ -26,6 +27,16 @@ CREATE TABLE IF NOT EXISTS daily_counts (
     day TEXT NOT NULL,
     count INTEGER NOT NULL,
     total_monitored INTEGER NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (country, day)
+);
+
+-- Media Cloud's own daily counts, kept apart from GDELT's so the two can be compared.
+CREATE TABLE IF NOT EXISTS mc_daily_counts (
+    country TEXT NOT NULL,
+    day TEXT NOT NULL,
+    count INTEGER NOT NULL,
+    total INTEGER NOT NULL,  -- all stories Media Cloud has from that collection that day
     fetched_at TEXT NOT NULL,
     PRIMARY KEY (country, day)
 );
@@ -58,20 +69,23 @@ class Store:
         cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(classifications)")}
         if "subtopic" not in cols:
             self.conn.execute("ALTER TABLE classifications ADD COLUMN subtopic TEXT")
+        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(articles)")}
+        if "source" not in cols:
+            self.conn.execute("ALTER TABLE articles ADD COLUMN source TEXT NOT NULL DEFAULT 'gdelt'")
 
     def close(self) -> None:
         self.conn.close()
 
-    def upsert_articles(self, country: str, articles: list[Article]) -> int:
+    def upsert_articles(self, country: str, articles: list[Article], source: str = "gdelt") -> int:
         """Insert new articles. Returns how many were new."""
         before = self.conn.total_changes
         now = _now()
         self.conn.executemany(
-            """INSERT INTO articles (url, country, title, domain, language, source_country, seen_at, fetched_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO articles (url, country, title, domain, language, source_country, seen_at, fetched_at, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(url) DO NOTHING""",
             [(a.url, country, a.title, a.domain, a.language, a.source_country,
-              a.seen_at.isoformat(), now) for a in articles],
+              a.seen_at.isoformat(), now, source) for a in articles],
         )
         self.conn.commit()
         return self.conn.total_changes - before
@@ -88,6 +102,23 @@ class Store:
             [(country, c.day, c.count, c.total_monitored, now) for c in counts],
         )
         self.conn.commit()
+
+    def upsert_mc_counts(self, country: str, counts: list[tuple[str, int, int]]) -> None:
+        """counts: (day, matching stories, all stories in the collection that day)."""
+        now = _now()
+        self.conn.executemany(
+            """INSERT INTO mc_daily_counts (country, day, count, total, fetched_at)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(country, day) DO UPDATE SET
+                 count = excluded.count, total = excluded.total, fetched_at = excluded.fetched_at""",
+            [(country, day, n, total, now) for day, n, total in counts],
+        )
+        self.conn.commit()
+
+    def mc_daily_counts(self) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            "SELECT country, day, count, total FROM mc_daily_counts ORDER BY country, day"
+        ).fetchall()
 
     def save_classification(self, url: str, relevant: bool, stance: str, category: str,
                             depth: int, rationale: str, model: str, subtopic: str | None = None) -> None:
@@ -119,7 +150,7 @@ class Store:
 
     def articles_with_labels(self) -> list[sqlite3.Row]:
         return self.conn.execute(
-            """SELECT a.url, a.country, a.title, a.domain, a.language, a.seen_at,
+            """SELECT a.url, a.country, a.title, a.domain, a.language, a.seen_at, a.source,
                       c.relevant, c.stance, c.category, c.depth, c.subtopic, c.rationale
                FROM articles a LEFT JOIN classifications c ON c.url = a.url
                ORDER BY a.seen_at DESC"""

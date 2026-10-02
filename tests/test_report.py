@@ -53,7 +53,7 @@ def test_write_report(tmp_path, config_file, load_fixture):
     csv_text = (tmp_path / "out" / "articles.csv").read_text()
     assert "nos.nl" in csv_text and ",10.0," in csv_text  # tier 1 weight
     weekly_csv = (tmp_path / "out" / "weekly_counts.csv").read_text().splitlines()
-    assert weekly_csv[0] == "week_start,NL,BE"
+    assert weekly_csv[0] == "week_start,NL_gdelt,BE_gdelt"
 
 
 def test_report_escapes_html(tmp_path, config_file):
