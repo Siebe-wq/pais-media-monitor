@@ -49,10 +49,16 @@ class Config:
     stance_guide: str = ""
     subtopics: list[str] = field(default_factory=list)
     mc_terms: list[str] = field(default_factory=list)
+    mc_raw: list[str] = field(default_factory=list)
 
     def mediacloud_query(self) -> str:
-        """Media Cloud searches the original text, so its terms are in several languages."""
-        return " OR ".join(f'"{t.strip()}"' for t in self.mc_terms)
+        """Media Cloud searches the original text, so its terms are in several languages.
+
+        `terms` are quoted as exact phrases; `raw` entries are used as written,
+        for combinations such as an abbreviation that only counts next to a topic word.
+        """
+        parts = [f'"{t.strip()}"' for t in self.mc_terms] + [f"({r.strip()})" for r in self.mc_raw]
+        return " OR ".join(parts)
 
     def gdelt_query(self) -> str:
         """All terms as one OR query. Can be too long for GDELT; see gdelt_queries."""
@@ -115,6 +121,7 @@ def load_config(path: str | Path) -> Config:
         stance_guide=classify.get("stance_guide", "").strip(),
         subtopics=classify.get("subtopics", []),
         mc_terms=raw.get("mediacloud", {}).get("terms", []),
+        mc_raw=raw.get("mediacloud", {}).get("raw", []),
     )
     if tier_weights:
         cfg.tier_weights = tier_weights

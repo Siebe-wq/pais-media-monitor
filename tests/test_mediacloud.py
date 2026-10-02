@@ -49,6 +49,12 @@ def test_query_quotes_every_term(config_file):
     assert cfg.countries[1].mediacloud is None
 
 
+def test_raw_expressions_are_added_in_brackets(config_file):
+    cfg = load_config(config_file)
+    cfg.mc_raw = ['PAIS AND ("long covid" OR infectiesyndromen)']
+    assert cfg.mediacloud_query().endswith(' OR (PAIS AND ("long covid" OR infectiesyndromen))')
+
+
 def test_resolve_collection_by_exact_name_or_id():
     d = FakeDirectory([{"id": 1, "name": "Netherlands - State & Local"}, NL])
     assert resolve_collection(d, "netherlands - national") == 34412100

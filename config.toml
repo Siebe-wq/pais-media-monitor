@@ -77,10 +77,16 @@ terms = [
   # Dutch
   "langdurige covid", "postcovid", "postcovidsyndroom", "post-COVID-syndroom", "ME/CVS",
   "chronisch vermoeidheidssyndroom", "myalgische encefalomyelitis", "post-exertionele malaise",
+  "post-acute infectiesyndromen", "postacute infectiesyndromen", "post-acute infectiesyndroom",
   # German
   "Post-Covid-Syndrom", "Post-Vac", "chronisches Fatigue-Syndrom", "Myalgische Enzephalomyelitis",
   # French (Belgium)
   "covid long", "syndrome post-covid", "encéphalomyélite myalgique", "syndrome de fatigue chronique",
+]
+# Raw search expressions, used exactly as written. "PAIS" alone would also match
+# Spanish/Portuguese "país" (country), so it only counts next to a topic word.
+raw = [
+  'PAIS AND ("long covid" OR "ME/CVS" OR "ME/CFS" OR infectiesyndromen OR infectiesyndroom OR "post-acute" OR postacute)',
 ]
 
 [reach]
