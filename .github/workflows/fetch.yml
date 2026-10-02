@@ -78,5 +78,7 @@ jobs:
             echo "Nothing new to save."
           else
             git commit -m "Update media data ($(date -u +%Y-%m-%d))"
+            # Someone may have pushed code while this ran; put our data on top.
+            git pull --rebase origin "$GITHUB_REF_NAME"
             git push
           fi
