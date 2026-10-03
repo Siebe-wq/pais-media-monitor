@@ -107,3 +107,27 @@ def test_report_shows_both_sources(tmp_path, config_file):
     assert ">Media Cloud</td>" in page
     header = (tmp_path / "out" / "weekly_counts.csv").read_text().splitlines()[0]
     assert header == "week_start,NL_gdelt,BE_gdelt,NL_mediacloud"
+
+
+def test_check_outlets(config_file):
+    from mediamonitor.mediacloud_source import check_outlets
+
+    class Dir(FakeDirectory):
+        def source_list(self, platform=None, name=None, limit=0):
+            return {"results": [{"id": 7, "name": "volkskrant.nl"}] if name == "volkskrant.nl" else
+                    [{"id": 9, "name": "ad.nl.example"}]}
+
+        def collection_list(self, platform=None, name=None, limit=0, source_id=None):
+            if source_id:
+                return {"results": [NL]}
+            return super().collection_list(platform, name, limit)
+
+    class Search:
+        def story_count(self, query, start, end, source_ids):
+            return {"relevant": 500 if query == "*" else 3, "total": 500}
+
+    rows = check_outlets(Dir([NL]), Search(), ["volkskrant.nl", "ad.nl"], "Netherlands - National",
+                         '"long covid"', date(2026, 7, 1), date(2026, 9, 30))
+    assert rows[0] == {"domain": "volkskrant.nl", "source_id": 7, "in_collection": True,
+                       "all_stories": 500, "matches": 3}
+    assert rows[1]["source_id"] is None and rows[1]["similar"] == ["ad.nl.example"]

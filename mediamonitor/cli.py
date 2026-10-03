@@ -106,6 +106,23 @@ def cmd_mc_collections(args) -> None:
         print(f'{c["id"]:>10}  {c["name"]}')
 
 
+def cmd_mc_check_outlets(args) -> None:
+    from .mediacloud_source import _client, check_outlets
+
+    cfg = load_config(args.config)
+    search, directory = _client(None)
+    end = datetime.now(timezone.utc).date()
+    start = end - timedelta(days=args.days)
+    print(f"Period: {start} to {end}. Collection: {args.collection}")
+    for r in check_outlets(directory, search, args.domains, args.collection,
+                           cfg.mediacloud_query(), start, end):
+        if r["source_id"] is None:
+            print(f"{r['domain']:<22} not found as a Media Cloud source. Similar names: {r.get('similar')}")
+        else:
+            print(f"{r['domain']:<22} source {r['source_id']}: in collection={r['in_collection']}, "
+                  f"stories indexed={r['all_stories']}, topic matches={r['matches']}")
+
+
 def cmd_classify(args) -> None:
     from .classify import classify_all
 
@@ -150,6 +167,12 @@ def main(argv=None) -> None:
     mc = sub.add_parser("mc-collections", help="search Media Cloud collection names, e.g. 'Netherlands'")
     mc.add_argument("name")
     mc.set_defaults(func=cmd_mc_collections)
+
+    oc = sub.add_parser("mc-check-outlets", help="check whether Media Cloud collects given outlets")
+    oc.add_argument("domains", nargs="+", help="e.g. volkskrant.nl ad.nl")
+    oc.add_argument("--collection", default="Netherlands - National")
+    oc.add_argument("--days", type=int, default=90)
+    oc.set_defaults(func=cmd_mc_check_outlets)
 
     c = sub.add_parser("classify", help="label stored articles with Claude (optional)")
     c.add_argument("--limit", type=int, default=None, help="label at most this many articles")

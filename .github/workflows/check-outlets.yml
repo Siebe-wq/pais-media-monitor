@@ -1,0 +1,37 @@
+# Checks whether Media Cloud collects specific outlets: is the outlet known,
+# is it in the national collection, how many stories did it index, and how
+# many match the search terms. Read-only.
+# Run it by hand: GitHub > Actions > "Check Media Cloud outlets" > "Run workflow".
+name: Check Media Cloud outlets
+
+on:
+  workflow_dispatch:
+    inputs:
+      domains:
+        description: "Outlet domains, separated by spaces"
+        default: "volkskrant.nl ad.nl telegraaf.nl trouw.nl nos.nl"
+      collection:
+        description: "Media Cloud collection name"
+        default: "Netherlands - National"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUNBUFFERED: "1"
+      MC_API_KEY: ${{ secrets.MC_API_KEY }}
+      DOMAINS: ${{ inputs.domains }}
+      COLLECTION: ${{ inputs.collection }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[mediacloud]'
+      - name: Check outlets
+        # DOMAINS is split into separate words on purpose.
+        run: mediamonitor -c config.toml mc-check-outlets $DOMAINS --collection "$COLLECTION"

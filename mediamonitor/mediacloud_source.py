@@ -111,3 +111,33 @@ def fetch_mediacloud(cfg: Config, store: Store, start: date, end: date,
         print(f"  {c.name}: {sum(n for _, n, _ in counts)} stories counted in collection {cid}, "
               f"{len(stories)} listed, {new} new{more}")
     return failed
+
+
+def check_outlets(directory, search, domains: list[str], collection: str | int | None,
+                  query: str, start: date, end: date) -> list[dict]:
+    """For each outlet: is Media Cloud collecting it, is it in the collection,
+    how many stories did it index in the period, and how many match our query?"""
+    cid = resolve_collection(directory, collection) if collection else None
+    rows = []
+    for domain in domains:
+        row = {"domain": domain, "source_id": None, "in_collection": None, "all_stories": None, "matches": None}
+        page = directory.source_list(platform="online_news", name=domain, limit=20)
+        found = page["results"] if isinstance(page, dict) else list(page)
+        exact = [x for x in found if x.get("name", "").lower().removeprefix("www.") == domain.lower()]
+        if exact:
+            sid = int(exact[0]["id"])
+            row["source_id"] = sid
+            if cid:
+                cols = directory.collection_list(source_id=sid, limit=100)
+                cols = cols["results"] if isinstance(cols, dict) else list(cols)
+                row["in_collection"] = any(int(x["id"]) == cid for x in cols)
+            row["all_stories"] = _count(search.story_count("*", start, end, source_ids=[sid]))
+            row["matches"] = _count(search.story_count(query, start, end, source_ids=[sid]))
+        else:
+            row["similar"] = [x.get("name") for x in found[:5]]
+        rows.append(row)
+    return rows
+
+
+def _count(result) -> int:
+    return int(result.get("relevant", 0)) if isinstance(result, dict) else int(result)
